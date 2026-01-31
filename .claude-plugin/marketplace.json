@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "tomago",
+  "description": "Andrew's Claude Plugin Marketplace circa Jan 2026",
+  "owner": {
+    "name": "andrew-tomago",
+    "url": "https://github.com/andrew-tomago"
+  },
+  "plugins": [
+    {
+      "name": "spam",
+      "source": "./plugins/spam"
+    }
+  ]
+}
