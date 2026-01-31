@@ -1,0 +1,12 @@
+{
+  "name": "spam",
+  "version": "0.1.0",
+  "description": "Skill & Plugin Activations Monitor — tracks and reports Claude Code skill/command usage",
+  "author": {
+    "name": "andrew-tomago",
+    "url": "https://github.com/andrew-tomago"
+  },
+  "repository": "https://github.com/andrew-tomago/tomago",
+  "license": "MIT",
+  "keywords": ["analytics", "skills", "tracking"]
+}
