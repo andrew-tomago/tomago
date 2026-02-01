@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # created: 2026-01-31
 # created_by:
-#   agent: Claude Code 2.1.27
+#   agent: Claude Code 2.1.29
 #   model: claude-opus-4-5-20251101
 """
 Catalog builder for SPAM.
@@ -18,6 +18,13 @@ from pathlib import Path
 DATA_DIR = Path.home() / ".claude" / "spam"
 CATALOG_PATH = DATA_DIR / "catalog.json"
 
+LIFECYCLE_DIRS = {
+    "active": "active",
+    "act": "active",
+    "_dev": "dev",
+    "passive": "passive",
+}
+
 
 def extract_frontmatter(path: Path) -> dict:
     """Parse YAML frontmatter from a markdown file.
@@ -32,7 +39,6 @@ def extract_frontmatter(path: Path) -> dict:
     except (OSError, UnicodeDecodeError):
         return result
 
-    # Frontmatter must start at the very beginning of the file
     if not text.startswith("---"):
         return result
 
@@ -51,7 +57,18 @@ def extract_frontmatter(path: Path) -> dict:
     return result
 
 
-def scan_skills(base: Path, source: str) -> list:
+def _infer_lifecycle(md_path: Path, commands_base: Path) -> str:
+    """Infer lifecycle stage from a command's position in the directory tree."""
+    try:
+        rel = md_path.relative_to(commands_base)
+    except ValueError:
+        return "active"
+    if len(rel.parts) <= 1:
+        return "active"
+    return LIFECYCLE_DIRS.get(rel.parts[0], "active")
+
+
+def scan_skills(base: Path, source: str, scope: str = "") -> list:
     """Find ``SKILL.md`` files under ``base/*/SKILL.md``."""
     entries: list = []
     if not base.is_dir():
@@ -73,6 +90,9 @@ def scan_skills(base: Path, source: str) -> list:
         entries.append({
             "name": child.name,
             "source": source,
+            "scope": scope,
+            "lifecycle": "active",
+            "model": fm.get("model", ""),
             "description": fm.get("description", ""),
             "skill_md_path": str(skill_md.resolve()),
         })
@@ -80,64 +100,79 @@ def scan_skills(base: Path, source: str) -> list:
     return entries
 
 
-def scan_commands(base: Path, source: str) -> list:
-    """Find ``.md`` command files, resolve symlinks for script paths.
+def scan_commands(base: Path, source: str, scope: str = "") -> list:
+    """Find ``.md`` command files recursively, deduplicating symlink aliases.
 
-    Searches the base directory plus known subdirectories
-    (``active/``, ``passive/``, ``_dev/``).
+    Uses ``rglob`` to handle arbitrary subdirectory nesting (``act/``,
+    ``active/``, ``passive/``, ``_dev/``, domain dirs like ``act/dotfiles/``).
+    Symlink alias pairs (kebab vs underscore) are collapsed — the resolved
+    path is used as dedup key so only one entry per real file appears.
     """
     entries: list = []
     if not base.is_dir():
         return entries
 
-    search_dirs = [base]
-    for subdir_name in ("active", "passive", "_dev"):
-        sub = base / subdir_name
-        if sub.is_dir():
-            search_dirs.append(sub)
+    seen_resolved: set = set()
 
-    for search_dir in search_dirs:
-        try:
-            children = sorted(search_dir.iterdir())
-        except OSError:
+    try:
+        md_files = sorted(base.rglob("*.md"))
+    except OSError:
+        return md_files
+
+    for child in md_files:
+        if not child.is_file():
             continue
 
-        for child in children:
-            if not child.is_file() or child.suffix != ".md":
-                continue
+        # Deduplicate symlink alias pairs by resolved path
+        try:
+            resolved = child.resolve(strict=True)
+        except (OSError, ValueError):
+            resolved = child
+        if resolved in seen_resolved:
+            continue
+        seen_resolved.add(resolved)
 
-            cmd_name = child.stem
-            script_path = ""
+        cmd_name = child.stem
+        lifecycle = _infer_lifecycle(child, base)
+        script_path = ""
+        model = ""
+        description = ""
 
-            # If the .md is a symlink, try to discover a companion script
-            if child.is_symlink():
-                try:
-                    resolved = child.resolve(strict=True)
-                    scripts_dir = resolved.parent / "scripts"
-                    if scripts_dir.is_dir():
-                        # Pick the first script file found
-                        for s in sorted(scripts_dir.iterdir()):
-                            if s.is_file():
-                                script_path = str(s.resolve())
-                                break
-                except (OSError, ValueError):
-                    # Broken symlink — skip script discovery, still record command
-                    pass
+        # Extract frontmatter from the resolved target
+        fm = extract_frontmatter(resolved)
+        model = fm.get("model", "")
+        description = fm.get("description", "")
 
-            entries.append({
-                "name": cmd_name,
-                "source": source,
-                "activation_pattern": f"/{cmd_name}",
-                "script_path": script_path,
-            })
+        # If the .md is a symlink, try to discover a companion script
+        if child.is_symlink():
+            try:
+                scripts_dir = resolved.parent / "scripts"
+                if scripts_dir.is_dir():
+                    for s in sorted(scripts_dir.iterdir()):
+                        if s.is_file():
+                            script_path = str(s.resolve())
+                            break
+            except (OSError, ValueError):
+                pass
+
+        entries.append({
+            "name": cmd_name,
+            "source": source,
+            "scope": scope,
+            "lifecycle": lifecycle,
+            "model": model,
+            "description": description,
+            "activation_pattern": f"/{cmd_name}",
+            "script_path": script_path,
+        })
 
     return entries
 
 
 def discover_plugins() -> list:
-    """Return list of ``(plugin_root, plugin_name)`` tuples.
+    """Return list of ``(plugin_root, plugin_name, scopes)`` tuples.
 
-    Reads ``~/.claude/plugins/installed_plugins.json`` when available,
+    Reads ``~/.claude/plugins/installed_plugins.json`` (v1 or v2),
     otherwise falls back to globbing the plugin cache directory.
     """
     plugins_dir = Path.home() / ".claude" / "plugins"
@@ -147,25 +182,55 @@ def discover_plugins() -> list:
     if manifest.is_file():
         try:
             data = json.loads(manifest.read_text(encoding="utf-8"))
-            # Expect a list of objects with at least a "path" or "name" key,
-            # or a dict keyed by plugin name.
-            if isinstance(data, list):
+
+            version = data.get("version", 1) if isinstance(data, dict) else 1
+
+            if version >= 2 and isinstance(data, dict):
+                # v2: {"version": 2, "plugins": {"name@org": [{"scope":..., "installPath":...}]}}
+                seen_paths: dict = {}  # installPath -> (name, scopes)
+                for key, scope_entries in data.get("plugins", {}).items():
+                    plugin_name = key.split("@")[0]
+                    if not isinstance(scope_entries, list):
+                        continue
+                    for entry in scope_entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        install_path = entry.get("installPath", "")
+                        entry_scope = entry.get("scope", "")
+                        if not install_path:
+                            continue
+                        p = Path(install_path).expanduser()
+                        key_path = str(p)
+                        if key_path in seen_paths:
+                            seen_paths[key_path][1].add(entry_scope)
+                        else:
+                            seen_paths[key_path] = (plugin_name, {entry_scope})
+                for path_str, (name, scopes) in seen_paths.items():
+                    p = Path(path_str)
+                    if p.is_dir():
+                        results.append((p, name, scopes))
+
+            elif isinstance(data, list):
+                # v1 list format
                 for entry in data:
                     if isinstance(entry, dict):
                         p = Path(entry.get("path", "")).expanduser()
                         name = entry.get("name", p.name)
                         if p.is_dir():
-                            results.append((p, name))
-            elif isinstance(data, dict):
+                            results.append((p, name, set()))
+
+            elif isinstance(data, dict) and version < 2:
+                # v1 dict format
                 for name, entry in data.items():
                     if isinstance(entry, dict):
                         p = Path(entry.get("path", "")).expanduser()
                         if p.is_dir():
-                            results.append((p, name))
+                            results.append((p, name, set()))
                     elif isinstance(entry, str):
                         p = Path(entry).expanduser()
                         if p.is_dir():
-                            results.append((p, name))
+                            results.append((p, name, set()))
+
         except (OSError, json.JSONDecodeError, TypeError):
             pass
 
@@ -173,12 +238,11 @@ def discover_plugins() -> list:
     if not results:
         cache_dir = plugins_dir / "cache"
         if cache_dir.is_dir():
-            # Pattern: cache/<org>/<repo>/<ref>/<plugin>/
+            # Pattern: cache/<org>/<plugin>/<version>/
             try:
-                for candidate in sorted(cache_dir.glob("*/*/*/*")):
+                for candidate in sorted(cache_dir.glob("*/*/*")):
                     if candidate.is_dir():
-                        plugin_name = candidate.name
-                        # Check for plugin.json to get a better name
+                        plugin_name = candidate.parent.name
                         pjson = candidate / "plugin.json"
                         if pjson.is_file():
                             try:
@@ -188,7 +252,7 @@ def discover_plugins() -> list:
                                 plugin_name = pdata.get("name", plugin_name)
                             except (OSError, json.JSONDecodeError):
                                 pass
-                        results.append((candidate, plugin_name))
+                        results.append((candidate, plugin_name, set()))
             except OSError:
                 pass
 
@@ -215,21 +279,22 @@ def build_catalog() -> dict:
     home = Path.home()
 
     # 1. User-scoped
-    skills.extend(scan_skills(home / ".claude" / "skills", "user"))
-    commands.extend(scan_commands(home / ".claude" / "commands", "user"))
+    skills.extend(scan_skills(home / ".claude" / "skills", "user", scope="user"))
+    commands.extend(scan_commands(home / ".claude" / "commands", "user", scope="user"))
 
     # 2. Project-scoped
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
     if project_dir:
         p = Path(project_dir)
-        skills.extend(scan_skills(p / ".claude" / "skills", "project"))
-        commands.extend(scan_commands(p / ".claude" / "commands", "project"))
+        skills.extend(scan_skills(p / ".claude" / "skills", "project", scope="project"))
+        commands.extend(scan_commands(p / ".claude" / "commands", "project", scope="project"))
 
     # 3. Plugins
-    for plugin_root, plugin_name in discover_plugins():
+    for plugin_root, plugin_name, scopes in discover_plugins():
         source = f"plugin:{plugin_name}"
-        skills.extend(scan_skills(plugin_root / "skills", source))
-        commands.extend(scan_commands(plugin_root / "commands", source))
+        scope_str = ", ".join(sorted(scopes)) if scopes else ""
+        skills.extend(scan_skills(plugin_root / "skills", source, scope=scope_str))
+        commands.extend(scan_commands(plugin_root / "commands", source, scope=scope_str))
 
     # De-duplicate
     skills = _dedup(skills, ("name", "source"))
