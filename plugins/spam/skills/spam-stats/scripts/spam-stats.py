@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 # created: 2026-01-31
+# updated: 2026-01-31
 # created_by:
 #   agent: Claude Code 2.1.27
 #   model: claude-opus-4-5-20251101
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["duckdb>=1.0"]
+# ///
 """
 Stats engine for SPAM.
 Queries activation data via DuckDB's SQLite scanner.
 Renders temporal analytics (daily, weekly, monthly, yearly, all-time).
-
-Requires: pip install duckdb
 """
 from __future__ import annotations
 
@@ -110,7 +113,8 @@ def run_stats_query(db_path: str, catalog: dict) -> list[dict]:
     except ImportError:
         print(
             "Error: duckdb not installed.\n"
-            "Install with: pip install duckdb\n"
+            "Run with: uv run --script <this-script>\n"
+            "Or install manually: pip install duckdb\n"
         )
         sys.exit(1)
 

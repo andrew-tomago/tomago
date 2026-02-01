@@ -1,6 +1,6 @@
 {
   "name": "spam",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Skill & Plugin Activations Monitor — tracks and reports Claude Code skill/command usage",
   "author": {
     "name": "andrew-tomago",

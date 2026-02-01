@@ -25,15 +25,15 @@ Run the following steps in order:
 
 3. Query and render the activation analytics report:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/skills/spam-stats/scripts/spam-stats.py"
+   uv run --script "${CLAUDE_PLUGIN_ROOT}/skills/spam-stats/scripts/spam-stats.py"
    ```
 
 The report displays component-level activation counts in a formatted table, grouped by component type (skill/command) and sorted by all-time usage. Detection methods are summarized at the bottom (tool_call, prompt_match, bash_match, transcript).
 
 ## Prerequisites
 
-- Python 3.7+
-- `duckdb` Python package: `pip install duckdb`
+- Python 3.9+
+- `uv` (astral-sh/uv) — manages duckdb dependency via PEP 723 inline metadata
 - Claude Code hooks configured (installed via `claude plugin install`)
 
 ## Data Location

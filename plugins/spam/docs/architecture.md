@@ -487,7 +487,7 @@ SQLite's concurrency model is well-matched to this workload: many short writes f
 |-----------|--------|-----------------|
 | track.py (hot path) | sqlite3 | No — Python stdlib |
 | reconcile.py | sqlite3 | No — Python stdlib |
-| spam-stats.py (query time) | duckdb | Yes — `pip install duckdb` |
+| spam-stats.py (query time) | duckdb | No — managed by `uv run` via PEP 723 |
 | catalog-builder.py | N/A (filesystem only) | No |
 
 The `duckdb` pip dependency is isolated to the `/spam-stats` read path. If DuckDB is unavailable, a fallback pure-SQLite stats query is feasible (replace `FILTER` with `SUM(CASE WHEN ...)` and `INTERVAL` with `date()`/`julianday()` arithmetic). Not implemented unless needed.
