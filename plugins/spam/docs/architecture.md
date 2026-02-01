@@ -1,7 +1,7 @@
 # SPAM — Skill & Plugin Activations Monitor
 ## POC Architecture
 
-> Scope: Internal architecture for the tracking and reporting system. Plugin packaging and distribution are out of scope for this document.
+*Scope: Internal architecture for the tracking and reporting system. Plugin packaging and distribution are out of scope for this document.*
 
 ---
 

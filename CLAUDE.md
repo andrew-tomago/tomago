@@ -4,7 +4,7 @@ Guidance for working with code and plugins in this marketplace repository.
 
 ## Overview
 
-**tomago** is a Claude Code plugin marketplace containing Andrew's public plugins.
+**tomago** is a public Claude Code plugin marketplace containing the **spam** plugin — a skill and plugin activations monitor that tracks usage analytics across sessions.
 
 ## Architecture
 ```
@@ -12,8 +12,13 @@ tomago/
 ├── .claude-plugin/marketplace.json   # Marketplace registry
 └── plugins/spam/
     ├── .claude-plugin/plugin.json    # Plugin metadata
-    ├── skills/                       # Source of truth
+    ├── skills/                       # Source of truth (2 skills)
+    │   ├── spam-catalog/
+    │   └── spam-stats/
     ├── commands/                     # Symlink projection layer
+    ├── hooks/                        # Event capture (track.py)
+    │   ├── hooks.json
+    │   └── scripts/
     └── docs/                         # Reference documentation
 ```
 
@@ -23,17 +28,15 @@ tomago/
 
 | Stage | Location | Model | User |
 |-------|----------|:-----:|:----:|
-| Development | `commands/<name>.md` | no | yes |
-| Production Active | `commands/active/<name>.md` | no | yes |
-| Production Passive | `commands/passive/<name>.md`| yes | no |
+| Development | `commands/_dev/<name>.md` | no | yes |
+| Production Active | `commands/act/<domain>/<name>.md` | no | yes |
+| Production Passive | *(symlink removed)* | yes | no |
 
 Promotion = move symlink. Autonomy = remove symlink + flip frontmatter flags.
 
-### Domain Directories in `act/`
-TODO: complete this when done
-
 ## Conventions
-TODO: link to another doc
+
+See [claude-skills-build-tool spec](https://github.com/andrew-tomago/claude-skills-build-tool/blob/main/README.md) for frontmatter spec, naming, symlinks, and invocation rules.
 
 **Model selection:**
 - Default: `claude-sonnet-4-5`
@@ -46,7 +49,7 @@ TODO: link to another doc
 Pre-1.0: MAJOR stays `0`. Version tracks the **catalog surface**—what users can invoke and discover.
 
 **MINOR** (`0.x.0`) — skill surface changes:
-- New skill added to `skills/` with a command symlink in `command/` or `commands/act/`
+- New skill added to `skills/` with a command symlink in `commands/`
 - Skill output/behavior fundamentally changes (different format, different workflow)
 - Skill removed or renamed
 - `plugin.json` schema change
@@ -59,11 +62,13 @@ Pre-1.0: MAJOR stays `0`. Version tracks the **catalog surface**—what users ca
 
 **No bump:** `_dev/`-only additions, dev tooling shuffles, CLAUDE.md edits
 
-Post-1.0: TODO establish rules for MAJOR version changes for breaking changes.
-
-## Commands
-
-See `Makefile` (or `docs/reference/commands.md`) for marketplace ops, skill dev, and validation commands.
+Post-1.0: TODO(4) establish rules for MAJOR version changes for breaking changes.
 
 ## Key Reference Files
-TODO
+
+| File | Purpose |
+|------|---------|
+| `plugins/spam/docs/architecture.md` | System design, detection strategies, data flow |
+| `plugins/spam/README.md` | Install instructions, dependencies, verify setup |
+| `plugins/spam/hooks/hooks.json` | Hook configuration (PostToolUse, UserPromptSubmit) |
+| `.claude-plugin/marketplace.json` | Marketplace registry metadata |

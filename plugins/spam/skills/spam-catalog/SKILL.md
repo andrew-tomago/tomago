@@ -1,8 +1,10 @@
 ---
 name: spam-catalog
-description: List all installed Claude Code skills and commands across plugins with their source and metadata
+description: "[Skill] [Sonnet] List installed skills and commands with source metadata"
+model: claude-sonnet-4-5
+disable-model-invocation: true
+user-invocable: true
 version: 0.1.0
-model: claude-sonnet-4-20250514
 ---
 
 # SPAM Catalog

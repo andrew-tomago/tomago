@@ -1,1 +1,0 @@
-../../skills/spam-stats/SKILL.md

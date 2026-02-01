@@ -1,8 +1,10 @@
 ---
 name: spam-stats
-description: Display activation analytics for all installed Claude Code skills and commands across temporal horizons
+description: "[Skill] [Sonnet] Display activation analytics across temporal horizons"
+model: claude-sonnet-4-5
+disable-model-invocation: true
+user-invocable: true
 version: 0.1.0
-model: claude-sonnet-4-20250514
 ---
 
 # SPAM Stats

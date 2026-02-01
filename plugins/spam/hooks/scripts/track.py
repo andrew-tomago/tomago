@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # created: 2026-01-31
+# updated: 2026-02-01
 # created_by:
-#   agent: Claude Code 2.1.27
+#   github_username: andrew-tomago
+#   agent: Claude Code 2.1.29
 #   model: claude-opus-4-5-20251101
 """
 Hook event capture for SPAM.
